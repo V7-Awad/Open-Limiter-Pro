@@ -3,8 +3,7 @@ import sys
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QFrame, QDoubleSpinBox, 
-    QComboBox, QMessageBox, QStatusBar, QSystemTrayIcon,
-    QMenu, QCheckBox
+    QComboBox, QMessageBox, QStatusBar
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QAction
@@ -14,7 +13,7 @@ try:
     from core.limiter import GlobalBandwidthLimiter
     from core.utils import (
         is_admin, restart_as_admin, format_speed_dual,
-        load_config, save_config, set_autostart, is_autostart_enabled
+        load_config, save_config
     )
     from ui.sparkline import SparklineWidget
     from ui.toggle_switch import ToggleSwitch
@@ -23,7 +22,7 @@ except ImportError:
     from ..core.limiter import GlobalBandwidthLimiter
     from ..core.utils import (
         is_admin, restart_as_admin, format_speed_dual,
-        load_config, save_config, set_autostart, is_autostart_enabled
+        load_config, save_config
     )
     from .sparkline import SparklineWidget
     from .toggle_switch import ToggleSwitch
@@ -41,11 +40,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("OPENLIMITER PRO // BANDWIDTH CONTROLLER")
-        self.setFixedSize(500, 765)
+        self.setFixedSize(500, 730)
 
         # Application state
-        self._force_quit = False
-        self._minimized_notified = False
         self.config = load_config()
 
         # Core engines
@@ -58,12 +55,7 @@ class MainWindow(QMainWindow):
         self.ul_preset_btns = []
 
         self._setup_ui()
-        self._setup_tray()
         self._connect_signals()
-
-        # Initialize autostart registry state if enabled
-        if self.config.get("autostart", True):
-            set_autostart(True)
 
         # Start live throughput telemetry
         self.monitor.start()
@@ -369,13 +361,6 @@ class MainWindow(QMainWindow):
         self.btn_unrestrict.clicked.connect(self._on_unrestrict_clicked)
         actions_vbox.addWidget(self.btn_unrestrict)
 
-        # Background & Startup Checkbox
-        self.autostart_cb = QCheckBox("Run in background & Start with Windows")
-        self.autostart_cb.setCursor(Qt.PointingHandCursor)
-        self.autostart_cb.setChecked(self.config.get("autostart", True))
-        self.autostart_cb.toggled.connect(self._on_autostart_toggled)
-        actions_vbox.addWidget(self.autostart_cb)
-
         main_layout.addLayout(actions_vbox)
 
         # -------------------------------------------------------------
@@ -388,56 +373,6 @@ class MainWindow(QMainWindow):
         self._update_dl_hint()
         self._update_ul_hint()
         self._update_status_display()
-
-    def _setup_tray(self):
-        """Initializes the Windows System Tray icon and context menu."""
-        self.tray_icon = QSystemTrayIcon(self)
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        icon_path = os.path.join(base_dir, "assets", "icon.ico")
-        if os.path.exists(icon_path):
-            self.tray_icon.setIcon(QIcon(icon_path))
-        self.tray_icon.setToolTip("OpenLimiter Pro - Bandwidth Controller")
-
-        tray_menu = QMenu(self)
-
-        self.tray_open_action = QAction("Open OpenLimiter Pro", self)
-        self.tray_open_action.triggered.connect(self._restore_from_tray)
-        tray_menu.addAction(self.tray_open_action)
-
-        self.tray_status_action = QAction("Status: Unrestricted", self)
-        self.tray_status_action.setEnabled(False)
-        tray_menu.addAction(self.tray_status_action)
-
-        self.tray_unrestrict_action = QAction("Unrestrict Speed", self)
-        self.tray_unrestrict_action.triggered.connect(self._on_unrestrict_clicked)
-        tray_menu.addAction(self.tray_unrestrict_action)
-
-        tray_menu.addSeparator()
-
-        self.tray_exit_action = QAction("Exit Application", self)
-        self.tray_exit_action.triggered.connect(self._on_exit_application)
-        tray_menu.addAction(self.tray_exit_action)
-
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self._on_tray_activated)
-        self.tray_icon.show()
-
-    def _restore_from_tray(self):
-        self.showNormal()
-        self.activateWindow()
-
-    def _on_tray_activated(self, reason):
-        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
-            self._restore_from_tray()
-
-    def _on_exit_application(self):
-        self._force_quit = True
-        self.close()
-
-    def _on_autostart_toggled(self, checked: bool):
-        self.config["autostart"] = checked
-        save_config(self.config)
-        set_autostart(checked)
 
     def _connect_signals(self):
         self.monitor.speed_updated.connect(self._on_speed_updated)
@@ -539,24 +474,20 @@ class MainWindow(QMainWindow):
             return max(10, int(val))
 
     def _load_saved_values(self):
-        # 1. Restore UI selections from config
-        dl_val = self.config.get("dl_value", 512.0)
-        dl_unit = self.config.get("dl_unit", self.UNIT_KBS)
+        # Restore UI selections from config
+        dl_val = self.config.get("dl_value", 1.0)
+        dl_unit = self.config.get("dl_unit", self.UNIT_MBPS)
         dl_on = self.config.get("dl_enabled", True)
         self.dl_spin.setValue(dl_val)
         self.dl_combo.setCurrentIndex(dl_unit)
         self.dl_toggle.setChecked(dl_on)
 
-        ul_val = self.config.get("ul_value", 256.0)
+        ul_val = self.config.get("ul_value", 512.0)
         ul_unit = self.config.get("ul_unit", self.UNIT_KBS)
         ul_on = self.config.get("ul_enabled", True)
         self.ul_spin.setValue(ul_val)
         self.ul_combo.setCurrentIndex(ul_unit)
         self.ul_toggle.setChecked(ul_on)
-
-        # 2. Re-engage limits if previously engaged
-        if self.config.get("engaged", False) and self.is_elevated:
-            self._on_engage_clicked(silent=True)
 
     def _on_engage_clicked(self, silent: bool = False):
         if not self.is_elevated:
@@ -638,35 +569,15 @@ class MainWindow(QMainWindow):
             txt_dl = f"{(dl_kb*8)/1024:.1f} Mbps" if dl_kb else "MAX"
             txt_ul = f"{(ul_kb*8)/1024:.1f} Mbps" if ul_kb else "MAX"
             self.status_bar.showMessage(f"SYS // ENGAGED: DL {txt_dl} | UL {txt_ul}   [ENGINE: KERNEL + SHAPER]")
-            if hasattr(self, "tray_status_action"):
-                self.tray_status_action.setText(f"Active: DL {txt_dl} | UL {txt_ul}")
         else:
             self.status_bar.showMessage("SYS // UNRESTRICTED (MAX THROUGHPUT)   [ENGINE: READY]")
-            if hasattr(self, "tray_status_action"):
-                self.tray_status_action.setText("Status: Unrestricted")
 
     def _on_restart_admin(self):
         self.monitor.stop()
         restart_as_admin()
 
     def closeEvent(self, event):
-        """
-        When closing the window, minimize to the system tray so that
-        bandwidth limiting and traffic shaping continue running in the background.
-        """
-        if not self._force_quit:
-            event.ignore()
-            self.hide()
-            if not self._minimized_notified:
-                self._minimized_notified = True
-                if self.tray_icon and self.tray_icon.isSystemTrayAvailable():
-                    self.tray_icon.showMessage(
-                        "OpenLimiter Pro",
-                        "Application minimized to background. Bandwidth limits remain active.",
-                        QSystemTrayIcon.Information,
-                        3000
-                    )
-        else:
-            self.monitor.stop()
-            self.limiter.remove_all_limits()
-            event.accept()
+        """Clean termination on window close."""
+        self.monitor.stop()
+        self.limiter.stop()
+        event.accept()

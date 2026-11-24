@@ -1,6 +1,5 @@
 import sys
 import os
-import ctypes
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
@@ -13,23 +12,7 @@ from PySide6.QtGui import QIcon
 from ui.styles import PREMIUM_2026_THEME_QSS
 from ui.main_window import MainWindow
 
-_single_instance_mutex = None
-
 def main():
-    global _single_instance_mutex
-
-    # Enforce single instance across the system
-    mutex_name = "OpenLimiterPro_SingleInstance_Mutex"
-    _single_instance_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
-    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-        # Bring already running instance to foreground
-        user32 = ctypes.windll.user32
-        hwnd = user32.FindWindowW(None, "OPENLIMITER PRO // BANDWIDTH CONTROLLER")
-        if hwnd:
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-            user32.SetForegroundWindow(hwnd)
-        sys.exit(0)
-
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
@@ -37,8 +20,6 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("OpenLimiter Pro")
     app.setApplicationDisplayName("OpenLimiter Pro")
-    # Keep application alive in system tray when window is hidden
-    app.setQuitOnLastWindowClosed(False)
 
     # Set Window and Taskbar Icon
     icon_path = os.path.join(BASE_DIR, "assets", "icon.ico")
@@ -51,12 +32,7 @@ def main():
     window = MainWindow()
     if os.path.exists(icon_path):
         window.setWindowIcon(QIcon(icon_path))
-
-    # Check for --minimized switch (used on Windows logon startup)
-    if "--minimized" in sys.argv:
-        window.hide()
-    else:
-        window.show()
+    window.show()
 
     sys.exit(app.exec())
 

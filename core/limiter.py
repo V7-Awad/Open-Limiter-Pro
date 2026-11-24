@@ -104,6 +104,12 @@ class GlobalBandwidthLimiter:
         logger.info("All bandwidth limits removed.")
         return True
 
+    def stop(self):
+        """Cleanly stops limiter and shaper server."""
+        self.remove_all_limits()
+        if hasattr(self, 'shaper') and self.shaper:
+            self.shaper.stop()
+
     def _ensure_nla_bypass(self):
         r"""
         Fixes Windows Workstation issue where QoS is ignored on non-domain networks.

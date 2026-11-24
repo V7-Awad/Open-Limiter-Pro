@@ -1,192 +1,168 @@
 # OpenLimiter Pro
 
-OpenLimiter Pro is a specialized network bandwidth management utility for Windows 10 and Windows 11 (64-bit). It enables users to establish precise, system-wide download and upload speed limits without needing per-application configuration or third-party kernel drivers.
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(64--bit)-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.10%2B-cyan.svg)
+![UI](https://img.shields.io/badge/Design-Linear%20%2F%20Raycast%202026-black.svg)
+![License](https://img.shields.io/badge/License-MIT-emerald.svg)
+
+**OpenLimiter Pro** is a high-performance system-wide network bandwidth controller and monitoring application for Windows. Engineered with a futuristic, precision-driven dark aesthetic inspired by Linear, Raycast, and Vercel, it enables system-wide throttling for both download and upload speeds without requiring external hardware or kernel drivers.
 
 ---
 
-## Technical Overview
+## ⚡ Key Highlights
 
-### The Ingress Regulation Challenge on Windows
-Windows provides built-in Quality of Service (QoS) cmdlets (`New-NetQosPolicy`), but these policies only regulate outbound (egress / upload) traffic. Windows client editions provide no native mechanism for throttling incoming (ingress / download) traffic without external network drivers.
-
-### The Dual-Engine Solution
-OpenLimiter Pro solves this limitation using a synchronized dual-engine architecture:
-
-1. **Ingress Engine (Download Shaper)**:
-   - Implements an asynchronous token-bucket rate-limiting stream proxy running on `127.0.0.1:8899`.
-   - Regulates incoming socket buffers using dynamic sleep intervals calculated from the target byte bucket.
-   - Configures WinINet system routing dynamically while running and automatically restores default networking states upon exit.
-
-2. **Egress Engine (Upload Controller)**:
-   - Interfaces directly with Windows PowerShell NetQoS infrastructure.
-   - Generates and modifies system-level QoS policies to enforce kernel-level egress throttling.
-   - Configures registry parameters (`Do not use NLA = 1`) to ensure QoS policies function reliably on non-domain client environments.
-
-3. **Loopback Filtered Telemetry**:
-   - Queries system network adapter I/O counters directly via `psutil`.
-   - Isolates physical network interfaces (Wi-Fi, Ethernet) from internal loopback sockets to prevent double-counting traffic forwarded through the local shaping proxy.
+- **Single Standalone Executable**: Completely portable (`OpenLimiterPro.exe`). Zero installation required, zero setup conflicts, and zero file locks.
+- **Dual-Engine Precision Architecture**:
+  - **Ingress (Download)**: High-throughput local token-bucket streaming proxy (`127.0.0.1:8899`) with WinINet system routing.
+  - **Egress (Upload)**: Windows NetQoS kernel policy enforcement with automated NLA bypass.
+- **1:1 Unit Matching (Mbps / MB/s / KB/s)**:
+  - Default unit is **Mbps** (Speedtest / Fast.com standard). Entering `1.0 Mbps` enforces an exact `1.0 Mbps` limit on Fast.com.
+  - Also supports `MB/s` (Browser / Steam / IDM transfer rates) and `KB/s` for fine-grained tuning.
+- **Real-Time Telemetry & Vector Sparklines**:
+  - Live throughput monitoring updated every second.
+  - Real-time animated vector waveforms for download and upload activity.
+  - Dual telemetry readout: simultaneously displays Byte rate (e.g., `512 KB/s`) and Bit rate (e.g., `4.1 Mbps`).
+- **Silent & Clean Lifecycle**:
+  - Headless QoS and registry execution with no visible console or PowerShell popup windows.
+  - Clean process exit: closing the window immediately restores full unthrottled network speed and terminates all threads cleanly.
 
 ---
 
-## Core Capabilities
+## 🖥️ User Interface Overview
 
-- **Single Global Rate Control**: Throttle all system network activity through a single control interface.
-- **Background Execution via System Tray**:
-  - Closing the application window minimizes it to the Windows Notification Area (System Tray).
-  - Bandwidth throttling policies remain active in the background.
-  - Context menu provides instant status inspection, speed unrestriction, and clean application exit.
-- **Logon Startup & State Persistence**:
-  - Optional registration in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
-  - Saves user settings to `%APPDATA%\OpenLimiterPro\config.json`.
-  - Automatically loads and re-engages saved limits upon Windows logon without opening an intrusive window.
-- **Multi-Unit Input & Telemetry**:
-  - Input targets in Megabits per second (**Mbps**), Megabytes per second (**MB/s**), or Kilobytes per second (**KB/s**).
-  - Displays dual telemetry showing both byte-based transfer rates and bit-based connection speeds.
-- **Live Vector Waveform**:
-  - Real-time sparkline visualization rendered with anti-aliasing to display short-term bandwidth variations.
-- **Segmented Quick Presets**:
-  - Quick-selection pills for frequently used rates (512 KB, 1 MB, 2 MB, 5 MB, 10 MB).
-
----
-
-## Telemetry Calculation Reference
-
-Different applications report network speeds in different units:
-- **Web Speed Tests (Fast.com, Speedtest.net)**: Measured in Megabits per second (**Mbps**).
-- **Web Browsers & Download Clients (Chrome, Steam, IDM)**: Measured in Kilobytes/Megabytes per second (**KB/s**, **MB/s**).
-
-### Conversion Formulas
-$$\text{Bitrate (Mbps)} = \frac{\text{Bytes per second} \times 8}{1{,}000{,}000}$$
-
-$$\text{Transfer Rate (MB/s)} = \frac{\text{Bytes per second}}{1{,}048{,}576}$$
-
-**Example:**
-- Setting a download limit of `512 KB/s` corresponds to:
-  $$512 \times 8 = 4{,}096\text{ Kbps} \approx 4.1\text{ Mbps}$$
-- OpenLimiter Pro displays both values simultaneously to eliminate confusion.
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ⚡ OPENLIMITER PRO                 [ ● ELEVATED ]          │
+│     SYSTEM BANDWIDTH CONTROLLER                             │
+├─────────────────────────────────────────────────────────────┤
+│  ● LIVE DOWNLOAD                    ● LIVE UPLOAD           │
+│    535.7 KB/s                          75.6 KB/s            │
+│    ≈ 4.4 Mbps (Fast.com)               ≈ 619.7 Kbps         │
+│    [~~~ Sparkline Graph ~~~]          [~~~ Sparkline ~~~]   │
+├─────────────────────────────────────────────────────────────┤
+│  ⬇ DOWNLOAD THROTTLE                               [ON]     │
+│    [ 1.0       ]  [ Mbps (Speedtest/Fast.com)  ▼ ]          │
+│    💡 Fast.com will show: 1.0 Mbps (~128 KB/s in Chrome)   │
+│    [ 1 Mbps ]  [ 2 Mbps ]  [ 4 Mbps ]  [ 8 Mbps ] [ 16 Mbps]│
+├─────────────────────────────────────────────────────────────┤
+│  ⬆ UPLOAD THROTTLE                                 [ON]     │
+│    [ 1.0       ]  [ Mbps (Speedtest/Fast.com)  ▼ ]          │
+│    💡 Speedtest will show: 1.0 Mbps (~128 KB/s outbound)    │
+│    [ 1 Mbps ]  [ 2 Mbps ]  [ 4 Mbps ]  [ 8 Mbps ] [ 16 Mbps]│
+├─────────────────────────────────────────────────────────────┤
+│         ⚡ ENGAGE BANDWIDTH LIMIT                           │
+│         ✕ UNRESTRICT SPEED                                  │
+├─────────────────────────────────────────────────────────────┤
+│ SYS // UNRESTRICTED (MAX THROUGHPUT)       [ENGINE: READY]  │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Installation & Distribution
+## 🚀 Quick Start (Portable Binary)
 
-OpenLimiter Pro is distributed as a single unified Windows setup installer:
-
-### Official Installer Executable
-- **File**: `dist/OpenLimiterPro_Setup.exe`
-- **Installation Directory**: `C:\Program Files\OpenLimiter Pro`
-- **Features Included**:
-  - Standard setup wizard with administrative execution manifest.
-  - Start Menu program group and desktop shortcut.
-  - Automatic registry startup configuration.
-  - Clean uninstaller registered in Windows Settings (Apps & Features).
+1. Download the standalone executable from `dist/OpenLimiterPro.exe` or the GitHub Releases page.
+2. Double-click **`OpenLimiterPro.exe`**.
+3. Accept the Windows UAC (User Account Control) prompt to grant administrative privileges (required for Windows network QoS and system proxy configuration).
+4. Set your desired **Download** and **Upload** limits:
+   - Use the preset buttons (e.g., `1 Mbps`, `2 Mbps`, `4 Mbps`, `8 Mbps`, `16 Mbps`) or enter a custom value.
+5. Click **⚡ ENGAGE BANDWIDTH LIMIT**.
+6. To restore maximum bandwidth at any time, click **✕ UNRESTRICT SPEED** or simply close the application.
 
 ---
 
-## User Guide
+## ⚙️ Technical Architecture
 
-### 1. Initial Launch
-Run `OpenLimiterPro_Setup.exe` to complete the installation. Launch OpenLimiter Pro from the desktop or Start Menu. When prompted by Windows User Account Control (UAC), accept administrative elevation.
+### 1. The Windows Ingress Throttling Challenge
+Windows client editions (Windows 10 / 11) provide native QoS policies (`New-NetQosPolicy`) that only regulate **outbound (egress)** network packets. Windows has no native kernel mechanism for throttling incoming (ingress / download) traffic without installing third-party NDIS filter drivers.
 
-### 2. Setting Download Speed Limit
-1. Locate the **Download Throttle** panel.
-2. Toggle the switch to **ENABLE**.
-3. Select your preferred unit from the dropdown:
-   - `Mbps`: Match speed test targets (e.g., enter `4.0` for 4 Mbps).
-   - `MB/s`: Match browser download speeds (e.g., enter `1.0` for 1 MB/s).
-   - `KB/s`: Precise kilobyte-level control.
-4. Or click one of the preset pills (`512 KB`, `1 MB`, `2 MB`, `5 MB`, `10 MB`).
-5. Click **ENGAGE BANDWIDTH LIMIT**.
-
-### 3. Setting Upload Speed Limit
-1. Locate the **Upload Throttle** panel.
-2. Toggle the switch to **ENABLE**.
-3. Select your preferred unit and specify the desired maximum outbound rate.
-4. Click **ENGAGE BANDWIDTH LIMIT**.
-
-### 4. Running in the Background
-- Click the window close button `[X]`.
-- The window will hide and minimize to the system tray. Traffic shaping continues running without interruption.
-- To reopen the window, double-click the system tray icon or right-click and choose **Open OpenLimiter Pro**.
-
-### 5. Restoring Unrestricted Speed
-- In the main window, click **UNRESTRICT SPEED**.
-- Alternatively, right-click the system tray icon and select **Unrestrict Speed**.
-- All QoS rules are deleted and default network routing is restored.
-
-### 6. Completely Exiting
-- Right-click the system tray icon and choose **Exit Application**.
-- OpenLimiter Pro will disable all policies, restore network adapter settings, and terminate.
+### 2. Dual-Engine Solution
+OpenLimiter Pro solves this through a synchronized two-layer architecture:
+- **Layer 1: User-Mode Token-Bucket Traffic Shaper**:
+  - Runs a local high-performance streaming socket proxy on `127.0.0.1:8899`.
+  - Implements an asynchronous token-bucket rate limiter that paces chunk reads to enforce exact download limits.
+  - Automatically updates the Windows Internet Settings registry (`ProxyEnable = 1`) and notifies WinINet to redirect HTTP/HTTPS/WebSocket traffic seamlessly.
+- **Layer 2: Kernel NetQoS Policy Enforcement**:
+  - Dynamically creates Windows PowerShell NetQoS policies for system-wide outbound bandwidth throttling.
+  - Automatically configures `HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\QoS\Do not use NLA = 1` via native Windows Registry APIs so policies apply consistently across all network adapters.
+- **Fail-Safe Cleanup**:
+  - Proxy and QoS configurations are automatically deactivated when the app is closed or when `UNRESTRICT SPEED` is triggered.
+  - Python's `atexit` handler guarantees that internet settings revert to direct connection even in the event of an unexpected termination.
 
 ---
 
-## Building from Source
+## 📊 Speed Units & Measurement Guide
+
+Internet bandwidth is measured differently depending on the tool:
+
+| Interface / Application | Unit Displayed | Description | Example Conversion |
+| :--- | :--- | :--- | :--- |
+| **Speedtest.net / Fast.com** | **Mbps** (Megabits/sec) | Network transmission bitrate | `1.0 Mbps` = `128 KB/s` |
+| **Chrome / Firefox / Edge** | **KB/s** or **MB/s** | File transfer byte rate | `1.0 MB/s` = `8.0 Mbps` |
+| **Steam / Epic Games / IDM** | **MB/s** (MegaBytes/sec) | Storage payload written per sec | `2.0 MB/s` = `16.0 Mbps` |
+
+OpenLimiter Pro displays both metrics simultaneously in the live telemetry header and dynamic calculation hints, ensuring you always know exactly what speed test results and browser downloads will report.
+
+---
+
+## 🛠️ Building from Source
 
 ### Prerequisites
-- Windows 10 / 11 (64-bit)
-- Python 3.10+
-- Inno Setup 6 (for packaging the setup installer)
+- Windows 10 or 11 (64-bit)
+- Python 3.10, 3.11, 3.12, 3.13, or 3.14
 
-### Step 1: Clone Repository & Install Dependencies
-```powershell
-git clone https://github.com/V7-Awad/Open-Limiter-Pro.git
-cd Open-Limiter-Pro
-pip install -r requirements.txt
-```
+### Installation Steps
 
-### Step 2: Run Application from Source
-```powershell
-python main.py
-```
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/V7-Awad/Open-Limiter-Pro.git
+   cd Open-Limiter-Pro
+   ```
 
-### Step 3: Compile Standalone Executable
-```powershell
-python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --icon="assets/icon.ico" --add-data="assets/icon.ico;assets" --add-data="assets/icon.png;assets" --name="OpenLimiterPro" main.py
-```
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Step 4: Compile Windows Setup Installer
-```powershell
-ISCC installer.iss
-```
-The output file `OpenLimiterPro_Setup.exe` will be generated in the `dist/` directory.
+3. **Run directly**:
+   ```bash
+   python main.py
+   ```
+
+4. **Compile Single Standalone Executable**:
+   ```bash
+   python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --icon="assets/icon.ico" --add-data="assets/icon.ico;assets" --add-data="assets/icon.png;assets" --name="OpenLimiterPro" --distpath="dist" main.py
+   ```
+   The compiled standalone binary will be generated at `dist/OpenLimiterPro.exe`.
 
 ---
 
-## Project Structure
+## 📁 Repository Structure
 
-```text
-OpenLimiter/
+```
+Open-Limiter-Pro/
 ├── assets/
-│   ├── icon.ico                     # Embedded application icon
-│   └── icon.png                     # Visual logo asset
+│   ├── icon.ico            # High-resolution application icon
+│   └── icon.png            # PNG branding logo
 ├── core/
-│   ├── limiter.py                   # High-level bandwidth orchestrator (QoS + Token Bucket)
-│   ├── models.py                    # Structured dataclasses and settings models
-│   ├── monitor.py                   # Physical adapter telemetry reader
-│   ├── shaper.py                    # Asynchronous token-bucket proxy & WinINet manager
-│   └── utils.py                     # Autostart registry helper, config persistence, UAC
+│   ├── limiter.py          # Dual-engine QoS & proxy orchestration
+│   ├── monitor.py          # Real-time network throughput sampler (psutil)
+│   ├── shaper.py           # Async token-bucket streaming proxy server
+│   └── utils.py            # Elevation, unit conversions, settings persistence
 ├── ui/
-│   ├── main_window.py               # Main Qt interface & System Tray integration
-│   ├── sparkline.py                 # Real-time vector waveform widget
-│   ├── styles.py                    # Dark theme stylesheet definition
-│   └── toggle_switch.py             # Animated toggle switch widget
+│   ├── main_window.py      # Linear/Raycast dark dashboard interface
+│   ├── sparkline.py        # Vector waveform sparkline widget
+│   ├── styles.py           # High-end 2026 QSS stylesheet
+│   └── toggle_switch.py    # Custom animated pill toggle switches
 ├── dist/
-│   └── OpenLimiterPro_Setup.exe     # Unified Windows Setup Installer
-├── installer.iss                    # Inno Setup 6 installer script
-├── main.py                          # Program entry point
-├── requirements.txt                 # Python runtime dependencies
-└── README.md                        # Documentation
+│   └── OpenLimiterPro.exe  # Standalone portable Windows executable
+├── main.py                 # Application bootstrap entry point
+├── requirements.txt        # Python package dependencies
+└── README.md               # Documentation
 ```
 
 ---
 
-## Technical Considerations
+## 📄 License
 
-- **Administrative Privileges**: Managing Windows NetQoS policies and system-level socket proxies requires elevated administrator rights. OpenLimiter Pro includes a UAC execution manifest to request elevation at launch.
-- **Port Binding**: The local ingress shaper listens on loopback port `127.0.0.1:8899`. If another process occupies this port, OpenLimiter Pro gracefully handles the socket binding.
-- **Safe Exit Guarantees**: A clean exit hook (`atexit`) ensures that even if the process is terminated unexpectedly, system proxy flags are reset to direct connection to avoid leaving the system in a disconnected state.
-
----
-
-## License Information
-
-Open source software. OpenLimiter Pro is freely distributable and customizable.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
