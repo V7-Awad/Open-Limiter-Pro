@@ -163,7 +163,7 @@ class MainWindow(QMainWindow):
         self.lbl_dl_sub.setProperty("class", "MetricSub")
         dl_metric_vbox.addWidget(self.lbl_dl_sub)
 
-        self.dl_sparkline = SparklineWidget(color=QColor("#00E5FF"), height=36)
+        self.dl_sparkline = SparklineWidget(stroke_color="#00E5FF", height=36)
         dl_metric_vbox.addWidget(self.dl_sparkline)
 
         telemetry_layout.addLayout(dl_metric_vbox, 1)
@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
         self.lbl_ul_sub.setProperty("class", "MetricSub")
         ul_metric_vbox.addWidget(self.lbl_ul_sub)
 
-        self.ul_sparkline = SparklineWidget(color=QColor("#A78BFA"), height=36)
+        self.ul_sparkline = SparklineWidget(stroke_color="#A78BFA", height=36)
         ul_metric_vbox.addWidget(self.ul_sparkline)
 
         telemetry_layout.addLayout(ul_metric_vbox, 1)

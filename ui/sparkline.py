@@ -8,13 +8,15 @@ class SparklineWidget(QWidget):
     Ultra-clean, high-performance real-time sparkline graph for network telemetry.
     Inspired by Linear, Raycast, and Datadog monitoring widgets.
     """
-    def __init__(self, stroke_color="#00E5FF", fill_alpha=40, max_points=35, parent=None):
+    def __init__(self, stroke_color="#00E5FF", color=None, fill_alpha=40, max_points=35, height=34, parent=None):
         super().__init__(parent)
-        self.stroke_color = QColor(stroke_color)
+        if color is not None:
+            stroke_color = color
+        self.stroke_color = QColor(stroke_color) if not isinstance(stroke_color, QColor) else stroke_color
         self.fill_alpha = fill_alpha
         self.max_points = max_points
         self.history = deque([0.0] * max_points, maxlen=max_points)
-        self.setFixedHeight(34)
+        self.setFixedHeight(height)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
 
     def add_point(self, value: float):
