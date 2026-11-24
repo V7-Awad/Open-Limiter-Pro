@@ -108,12 +108,14 @@ class GlobalBandwidthLimiter:
         r"""
         Fixes Windows Workstation issue where QoS is ignored on non-domain networks.
         Sets HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\QoS\Do not use NLA = 1
+        Uses direct winreg API to eliminate console process popups.
         """
         try:
-            cmd = ['reg', 'add', r'HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\QoS', '/v', 'Do not use NLA', '/t', 'REG_SZ', '/d', '1', '/f']
-            subprocess.run(cmd, capture_output=True, text=True, errors='ignore')
-        except Exception:
-            pass
+            key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\Tcpip\QoS")
+            winreg.SetValueEx(key, "Do not use NLA", 0, winreg.REG_SZ, "1")
+            winreg.CloseKey(key)
+        except Exception as e:
+            logger.debug(f"NLA bypass update: {e}")
 
     def _set_policy(self, policy_name: str, limit_kb: Optional[int]) -> bool:
         self._remove_policy(policy_name)
@@ -121,22 +123,31 @@ class GlobalBandwidthLimiter:
             return True
 
         bps = int(limit_kb * 8192)
-        ps_cmd = (
-            f'New-NetQosPolicy -Name "{policy_name}" '
-            f'-NetworkProfile All '
-            f'-ThrottleRateActionBitsPerSecond {bps} '
-            f'-Confirm:$false'
-        )
+        ps_cmd = f"& {{ New-NetQosPolicy -Name '{policy_name}' -NetworkProfile All -ThrottleRateActionBitsPerSecond {bps} -Confirm:`$false -ErrorAction SilentlyContinue }}"
         try:
-            res = subprocess.run(['powershell', '-NoProfile', '-Command', ps_cmd], capture_output=True, text=True, errors='ignore')
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            res = subprocess.run(
+                ['powershell', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+                capture_output=True,
+                text=True,
+                errors='ignore',
+                creationflags=flags
+            )
             return res.returncode == 0
         except Exception as e:
             logger.error(f"Failed setting policy {policy_name}: {e}")
             return False
 
     def _remove_policy(self, policy_name: str):
-        ps_cmd = f'Remove-NetQosPolicy -Name "{policy_name}" -Confirm:$false -ErrorAction SilentlyContinue'
+        ps_cmd = f"& {{ Remove-NetQosPolicy -Name '{policy_name}' -Confirm:`$false -ErrorAction SilentlyContinue }}"
         try:
-            subprocess.run(['powershell', '-NoProfile', '-Command', ps_cmd], capture_output=True, text=True, errors='ignore')
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            subprocess.run(
+                ['powershell', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+                capture_output=True,
+                text=True,
+                errors='ignore',
+                creationflags=flags
+            )
         except Exception:
             pass

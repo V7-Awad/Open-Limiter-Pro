@@ -55,11 +55,11 @@ def get_config_path() -> str:
 def load_config() -> dict:
     """Loads saved settings from config.json with fallback defaults."""
     default_config = {
-        "dl_value": 512.0,
-        "dl_unit": 2,  # KB/s
+        "dl_value": 2.0,
+        "dl_unit": 0,  # 0: Mbps (Speedtest/Fast.com)
         "dl_enabled": True,
-        "ul_value": 256.0,
-        "ul_unit": 2,  # KB/s
+        "ul_value": 1.0,
+        "ul_unit": 0,  # 0: Mbps (Speedtest/Fast.com)
         "ul_enabled": True,
         "engaged": False,
         "autostart": True,

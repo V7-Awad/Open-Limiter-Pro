@@ -238,13 +238,13 @@ class MainWindow(QMainWindow):
         self.dl_spin = QDoubleSpinBox()
         self.dl_spin.setRange(0.1, 100000.0)
         self.dl_spin.setDecimals(1)
-        self.dl_spin.setValue(512.0)
-        self.dl_spin.setSingleStep(1.0)
+        self.dl_spin.setValue(2.0)
+        self.dl_spin.setSingleStep(0.5)
         dl_input_row.addWidget(self.dl_spin, 1)
 
         self.dl_combo = QComboBox()
         self.dl_combo.addItems(["Mbps (Speedtest/Fast)", "MB/s (Browser)", "KB/s"])
-        self.dl_combo.setCurrentIndex(self.UNIT_KBS)
+        self.dl_combo.setCurrentIndex(self.UNIT_MBPS)
         dl_input_row.addWidget(self.dl_combo)
 
         dl_vbox.addLayout(dl_input_row)
@@ -258,11 +258,11 @@ class MainWindow(QMainWindow):
         dl_presets_layout = QHBoxLayout()
         dl_presets_layout.setSpacing(6)
         dl_presets = [
-            ("512 KB", 512, self.UNIT_KBS),
-            ("1 MB", 1.0, self.UNIT_MBS),
-            ("2 MB", 2.0, self.UNIT_MBS),
-            ("5 MB", 5.0, self.UNIT_MBS),
-            ("10 MB", 10.0, self.UNIT_MBS),
+            ("1 Mbps", 1.0, self.UNIT_MBPS),
+            ("2 Mbps", 2.0, self.UNIT_MBPS),
+            ("4 Mbps", 4.0, self.UNIT_MBPS),
+            ("8 Mbps", 8.0, self.UNIT_MBPS),
+            ("16 Mbps", 16.0, self.UNIT_MBPS),
         ]
         for label, val, u_idx in dl_presets:
             btn = QPushButton(label)
@@ -310,13 +310,13 @@ class MainWindow(QMainWindow):
         self.ul_spin = QDoubleSpinBox()
         self.ul_spin.setRange(0.1, 100000.0)
         self.ul_spin.setDecimals(1)
-        self.ul_spin.setValue(256.0)
-        self.ul_spin.setSingleStep(1.0)
+        self.ul_spin.setValue(1.0)
+        self.ul_spin.setSingleStep(0.5)
         ul_input_row.addWidget(self.ul_spin, 1)
 
         self.ul_combo = QComboBox()
         self.ul_combo.addItems(["Mbps (Speedtest/Fast)", "MB/s (Browser)", "KB/s"])
-        self.ul_combo.setCurrentIndex(self.UNIT_KBS)
+        self.ul_combo.setCurrentIndex(self.UNIT_MBPS)
         ul_input_row.addWidget(self.ul_combo)
 
         ul_vbox.addLayout(ul_input_row)
@@ -330,11 +330,11 @@ class MainWindow(QMainWindow):
         ul_presets_layout = QHBoxLayout()
         ul_presets_layout.setSpacing(6)
         ul_presets = [
-            ("128 KB", 128, self.UNIT_KBS),
-            ("256 KB", 256, self.UNIT_KBS),
-            ("512 KB", 512, self.UNIT_KBS),
-            ("1 MB", 1.0, self.UNIT_MBS),
-            ("2 MB", 2.0, self.UNIT_MBS),
+            ("512 Kbps", 0.5, self.UNIT_MBPS),
+            ("1 Mbps", 1.0, self.UNIT_MBPS),
+            ("2 Mbps", 2.0, self.UNIT_MBPS),
+            ("4 Mbps", 4.0, self.UNIT_MBPS),
+            ("8 Mbps", 8.0, self.UNIT_MBPS),
         ]
         for label, val, u_idx in ul_presets:
             btn = QPushButton(label)
@@ -473,26 +473,26 @@ class MainWindow(QMainWindow):
         if mode == self.UNIT_MBPS:
             kb = int(val * 1024 / 8)
             mb = kb / 1024
-            self.lbl_dl_hint.setText(f"💡 {val:.1f} Mbps = ~{kb} KB/s ({mb:.2f} MB/s) in Chrome / Downloads")
+            self.lbl_dl_hint.setText(f"💡 Fast.com will show: {val:.1f} Mbps  (~{kb} KB/s in Chrome)")
         elif mode == self.UNIT_MBS:
             mbps = val * 8
-            self.lbl_dl_hint.setText(f"💡 {val:.1f} MB/s = ~{mbps:.1f} Mbps on Fast.com / Speedtest")
+            self.lbl_dl_hint.setText(f"💡 {val:.1f} MB/s = {mbps:.1f} Mbps on Fast.com (1 Byte = 8 bits. Choose Mbps for {val:.0f} Mbps)")
         else: # KB/s
             mbps = (val * 8) / 1024
-            self.lbl_dl_hint.setText(f"💡 {val:.0f} KB/s = ~{mbps:.2f} Mbps on Fast.com / Speedtest")
+            self.lbl_dl_hint.setText(f"💡 {val:.0f} KB/s = {mbps:.2f} Mbps on Fast.com (1 Byte = 8 bits)")
 
     def _update_ul_hint(self):
         val = self.ul_spin.value()
         mode = self.ul_combo.currentIndex()
         if mode == self.UNIT_MBPS:
             kb = int(val * 1024 / 8)
-            self.lbl_ul_hint.setText(f"💡 {val:.1f} Mbps = ~{kb} KB/s in upload")
+            self.lbl_ul_hint.setText(f"💡 Speedtest will show: {val:.1f} Mbps  (~{kb} KB/s outbound)")
         elif mode == self.UNIT_MBS:
             mbps = val * 8
-            self.lbl_ul_hint.setText(f"💡 {val:.1f} MB/s = ~{mbps:.1f} Mbps on Speedtest")
+            self.lbl_ul_hint.setText(f"💡 {val:.1f} MB/s = {mbps:.1f} Mbps on Speedtest (1 Byte = 8 bits)")
         else:
             mbps = (val * 8) / 1024
-            self.lbl_ul_hint.setText(f"💡 {val:.0f} KB/s = ~{mbps:.2f} Mbps on Speedtest")
+            self.lbl_ul_hint.setText(f"💡 {val:.0f} KB/s = {mbps:.2f} Mbps on Speedtest (1 Byte = 8 bits)")
 
     def _apply_preset_dl(self, val: float, unit_idx: int, clicked_btn: QPushButton):
         self.dl_toggle.setChecked(True)
