@@ -10,12 +10,17 @@ OpenLimiter Pro is an open-source, system-wide network bandwidth controller and 
 - **Dual-Engine Shaping Architecture**:
   - Asynchronous token-bucket traffic shaper with local HTTP/HTTPS tunneling for precise ingress rate pacing.
   - Native Windows Quality of Service (QoS) egress throttling policies via Windows PowerShell management API.
+- **Background Persistence & System Tray**:
+  - Closing the application window minimizes it to the Windows System Tray, keeping active bandwidth throttling running uninterrupted in the background.
+  - Right-click tray menu provides quick access to status, speed unrestriction, and clean application exit.
+- **Windows Startup & State Persistence**:
+  - Automatically launches at Windows boot with saved bandwidth limits restored and applied silently.
 - **Real-Time Telemetry**: Live throughput gauges with integrated anti-aliased vector sparkline graphs for instant visual feedback.
 - **Unified Unit Selectors**: Set targets and read throughput in **Mbps**, **MB/s**, or **KB/s** with automatic dual-unit display and live calculation hints.
 - **Professional Dark Interface**: Polished UI with smooth animations, elevated status indicator, and segmented preset pills.
 - **Standalone Executable & Windows Installer**:
   - **Standalone Executable**: Portable single-file binary with embedded icons and automatic UAC elevation manifest.
-  - **Windows Installer**: Complete setup wizard that installs to Program Files, creates Start Menu and Desktop shortcuts, and provides clean uninstallation.
+  - **Windows Installer**: Complete setup wizard that installs to Program Files, creates Start Menu and Desktop shortcuts, registers auto-start, and provides clean uninstallation.
 
 ---
 
@@ -52,7 +57,7 @@ dist/OpenLimiterPro.exe
 ### Compiling the Standalone Executable
 To rebuild `OpenLimiterPro.exe`:
 ```bash
-pyinstaller --noconfirm --onedir=False --windowed --uac-admin --icon="assets/icon.ico" --add-data="assets/icon.ico;assets" --add-data="assets/icon.png;assets" --name="OpenLimiterPro" main.py
+python -m PyInstaller --noconfirm --onefile --windowed --uac-admin --icon="assets/icon.ico" --add-data="assets/icon.ico;assets" --add-data="assets/icon.png;assets" --name="OpenLimiterPro" main.py
 ```
 
 ### Compiling the Windows Setup Installer
@@ -76,9 +81,9 @@ OpenLimiter/
 │   ├── models.py           # Data structures and settings dataclasses
 │   ├── monitor.py          # Adapter I/O telemetry background worker
 │   ├── shaper.py           # Asynchronous token-bucket proxy & WinINet controller
-│   └── utils.py            # UAC elevation, formatting utilities
+│   └── utils.py            # UAC elevation, registry autostart, persistence, formatters
 ├── ui/
-│   ├── main_window.py      # Primary Qt application window
+│   ├── main_window.py      # Primary Qt application window & System Tray
 │   ├── sparkline.py        # Vector waveform graph
 │   ├── styles.py           # Application visual stylesheet
 │   └── toggle_switch.py    # Custom animated switch component

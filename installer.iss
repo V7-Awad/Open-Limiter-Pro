@@ -4,7 +4,7 @@
 #define MyAppName "OpenLimiter Pro"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "OpenLimiter Team"
-#define MyAppURL "https://github.com/muztafaa7med/OpenLimiterPro"
+#define MyAppURL "https://github.com/V7-Awad/Open-Limiter-Pro"
 #define MyAppExeName "OpenLimiterPro.exe"
 
 [Setup]
@@ -45,6 +45,9 @@ Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "OpenLimiterPro"; ValueData: """{app}\{#MyAppExeName}"" --minimized"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

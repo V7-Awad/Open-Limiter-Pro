@@ -20,6 +20,8 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("OpenLimiter Pro")
     app.setApplicationDisplayName("OpenLimiter Pro")
+    # Keep application alive in system tray when window is hidden
+    app.setQuitOnLastWindowClosed(False)
 
     # Set Window and Taskbar Icon
     icon_path = os.path.join(BASE_DIR, "assets", "icon.ico")
@@ -32,7 +34,12 @@ def main():
     window = MainWindow()
     if os.path.exists(icon_path):
         window.setWindowIcon(QIcon(icon_path))
-    window.show()
+
+    # Check for --minimized switch (used on Windows logon startup)
+    if "--minimized" in sys.argv:
+        window.hide()
+    else:
+        window.show()
 
     sys.exit(app.exec())
 

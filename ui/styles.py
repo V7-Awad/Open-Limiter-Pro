@@ -264,4 +264,61 @@ QStatusBar {
     border-top: 1px solid #151F30;
     padding-top: 4px;
 }
+
+/* System Tray & Context Menus */
+QMenu {
+    background-color: #101725;
+    border: 1px solid #1E293B;
+    border-radius: 8px;
+    padding: 6px;
+    color: #F1F5F9;
+}
+
+QMenu::item {
+    background-color: transparent;
+    padding: 7px 18px;
+    border-radius: 6px;
+    color: #F1F5F9;
+    font-size: 12px;
+}
+
+QMenu::item:selected {
+    background-color: #1E293B;
+    color: #00E5FF;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: #1E293B;
+    margin: 4px 6px;
+}
+
+/* Settings CheckBox */
+QCheckBox {
+    color: #8492A6;
+    font-size: 11px;
+    font-weight: 600;
+    spacing: 8px;
+}
+
+QCheckBox:hover {
+    color: #F1F5F9;
+}
+
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1px solid #1E293B;
+    background-color: #101725;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #00E5FF;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #00E5FF;
+    border-color: #00E5FF;
+}
 """
