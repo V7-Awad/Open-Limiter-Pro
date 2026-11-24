@@ -1,5 +1,5 @@
 ; Script generated for Inno Setup 6
-; OpenLimiter Pro Windows Setup Script
+; OpenLimiter Pro Windows Setup Script - Current User Only Installation
 
 #define MyAppName "OpenLimiter Pro"
 #define MyAppVersion "1.0.0"
@@ -15,17 +15,25 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\{#MyAppName}
+
+; Current User Only (Per-User Installation)
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=no
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+
+; Process Management & Overwrite Protection
+AppMutex=OpenLimiterPro_SingleInstance_Mutex
+CloseApplications=force
+CloseApplicationsFilter=OpenLimiterPro.exe
+
 OutputDir=dist
 OutputBaseFilename=OpenLimiterPro_Setup
 SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
-PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -51,3 +59,21 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  // Terminate any running instance before file replacement
+  Exec('cmd.exe', '/c taskkill /F /IM OpenLimiterPro.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('cmd.exe', '/c taskkill /F /IM OpenLimiterPro.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := True;
+end;
