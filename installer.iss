@@ -18,7 +18,6 @@ AppUpdatesURL={#MyAppURL}
 
 ; Current User Only (Per-User Installation)
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=no
 DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
