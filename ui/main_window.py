@@ -3,7 +3,8 @@ import sys
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QFrame, QDoubleSpinBox, 
-    QComboBox, QMessageBox, QStatusBar
+    QComboBox, QMessageBox, QStatusBar, QCheckBox, QSystemTrayIcon, QMenu,
+    QApplication, QDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QAction
@@ -13,7 +14,8 @@ try:
     from core.limiter import GlobalBandwidthLimiter
     from core.utils import (
         is_admin, restart_as_admin, format_speed_dual,
-        load_config, save_config
+        load_config, save_config, set_autostart, is_autostart_enabled,
+        create_desktop_shortcut
     )
     from ui.sparkline import SparklineWidget
     from ui.toggle_switch import ToggleSwitch
@@ -22,7 +24,8 @@ except ImportError:
     from ..core.limiter import GlobalBandwidthLimiter
     from ..core.utils import (
         is_admin, restart_as_admin, format_speed_dual,
-        load_config, save_config
+        load_config, save_config, set_autostart, is_autostart_enabled,
+        create_desktop_shortcut
     )
     from .sparkline import SparklineWidget
     from .toggle_switch import ToggleSwitch
@@ -41,9 +44,16 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("OPENLIMITER PRO // BANDWIDTH CONTROLLER")
         self.setFixedSize(500, 730)
+        self.setToolTip(
+            "Shared system limits: downloads use the Windows system proxy; uploads use Windows QoS. "
+            "Apps that bypass the system proxy may not follow the download limit."
+        )
 
         # Application state
         self.config = load_config()
+        self.config["autostart"] = is_autostart_enabled()
+        self._force_exit = False
+        self.tray_icon = None
 
         # Core engines
         self.is_elevated = is_admin()
@@ -55,6 +65,7 @@ class MainWindow(QMainWindow):
         self.ul_preset_btns = []
 
         self._setup_ui()
+        self._setup_tray()
         self._connect_signals()
 
         # Start live throughput telemetry
@@ -216,6 +227,9 @@ class MainWindow(QMainWindow):
         dl_top_row.addStretch()
 
         self.dl_toggle = ToggleSwitch(active_color="#00E5FF")
+        self.dl_toggle.setToolTip(
+            "Shared download limit through the Windows system proxy. Apps that bypass that proxy are not shaped."
+        )
         self.dl_toggle.setChecked(True)
         dl_toggle_lbl = QLabel("ENABLE")
         dl_toggle_lbl.setStyleSheet("color: #8492A6; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;")
@@ -288,6 +302,7 @@ class MainWindow(QMainWindow):
         ul_top_row.addStretch()
 
         self.ul_toggle = ToggleSwitch(active_color="#00E5FF")
+        self.ul_toggle.setToolTip("Shared upload limit enforced with Windows QoS.")
         self.ul_toggle.setChecked(True)
         ul_toggle_lbl = QLabel("ENABLE")
         ul_toggle_lbl.setStyleSheet("color: #8492A6; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;")
@@ -368,6 +383,7 @@ class MainWindow(QMainWindow):
         # -------------------------------------------------------------
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+        self._setup_settings_dialog()
 
         self._load_saved_values()
         self._update_dl_hint()
@@ -376,6 +392,105 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self):
         self.monitor.speed_updated.connect(self._on_speed_updated)
+
+    def _setup_tray(self):
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+
+        icon = QApplication.windowIcon()
+        if icon.isNull():
+            icon = self.windowIcon()
+        self.tray_icon = QSystemTrayIcon(icon, self)
+        self.tray_icon.setToolTip("OpenLimiter Pro")
+
+        tray_menu = QMenu(self)
+        show_action = QAction("Open OpenLimiter", self)
+        show_action.triggered.connect(self._show_from_tray)
+        tray_menu.addAction(show_action)
+        tray_menu.addSeparator()
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self._exit_from_tray)
+        tray_menu.addAction(exit_action)
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(self._on_tray_activated)
+        self.tray_icon.show()
+
+        self.start_minimized = (
+            "--minimized" in sys.argv
+            and self.config.get("close_to_tray", False)
+            and self.tray_icon is not None
+        )
+
+    def _setup_settings_dialog(self):
+        self.settings_dialog = QDialog(self)
+        self.settings_dialog.setWindowTitle("OpenLimiter Settings")
+        self.settings_dialog.setMinimumWidth(390)
+        dialog_layout = QVBoxLayout(self.settings_dialog)
+        dialog_layout.setSpacing(12)
+
+        self.autostart_check = QCheckBox("Start OpenLimiter when I sign in to Windows")
+        self.autostart_check.setChecked(bool(self.config.get("autostart", False)))
+        self.autostart_check.setToolTip(
+            "OpenLimiter starts with Windows. It starts hidden when notification-area mode is enabled."
+        )
+        self.autostart_check.toggled.connect(self._on_autostart_toggled)
+        dialog_layout.addWidget(self.autostart_check)
+
+        self.close_to_tray_check = QCheckBox("Keep running in the notification area when closed")
+        self.close_to_tray_check.setChecked(bool(self.config.get("close_to_tray", False)))
+        self.close_to_tray_check.setToolTip(
+            "The X button hides the window; use the OpenLimiter tray icon and choose Exit to stop the app."
+        )
+        self.close_to_tray_check.setEnabled(QSystemTrayIcon.isSystemTrayAvailable())
+        self.close_to_tray_check.toggled.connect(self._on_close_to_tray_toggled)
+        dialog_layout.addWidget(self.close_to_tray_check)
+
+        shortcut_button = QPushButton("Create desktop shortcut")
+        shortcut_button.clicked.connect(self._on_create_desktop_shortcut)
+        dialog_layout.addWidget(shortcut_button)
+
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.settings_dialog.accept)
+        dialog_layout.addWidget(close_button)
+
+        settings_button = QPushButton("⚙ Settings")
+        settings_button.setToolTip("Startup, background, and desktop shortcut settings")
+        settings_button.clicked.connect(self.settings_dialog.exec)
+        self.status_bar.addPermanentWidget(settings_button)
+
+    def _show_from_tray(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _on_tray_activated(self, reason):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                      QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._show_from_tray()
+
+    def _exit_from_tray(self):
+        self._force_exit = True
+        self.close()
+
+    def _on_autostart_toggled(self, enabled: bool):
+        if not set_autostart(enabled):
+            self.autostart_check.blockSignals(True)
+            self.autostart_check.setChecked(not enabled)
+            self.autostart_check.blockSignals(False)
+            QMessageBox.warning(self, "Startup setting failed", "Windows could not update the startup setting.")
+            return
+        self.config["autostart"] = enabled
+        save_config(self.config)
+
+    def _on_close_to_tray_toggled(self, enabled: bool):
+        self.config["close_to_tray"] = enabled
+        save_config(self.config)
+
+    def _on_create_desktop_shortcut(self):
+        if create_desktop_shortcut():
+            QMessageBox.information(self, "Shortcut created", "OpenLimiter Pro was added to your desktop.")
+        else:
+            QMessageBox.warning(self, "Shortcut failed", "Windows could not create the desktop shortcut.")
 
     def _on_speed_updated(self, dl_bytes: float, ul_bytes: float):
         dl_byte_str, dl_bit_str = format_speed_dual(dl_bytes)
@@ -495,7 +610,7 @@ class MainWindow(QMainWindow):
                 res = QMessageBox.warning(
                     self,
                     "Elevation Required",
-                    "Applying Windows system-wide bandwidth limits requires Administrator privileges.\n\n"
+                    "Applying bandwidth limits requires Administrator privileges.\n\n"
                     "Relaunch OpenLimiter as Administrator now?",
                     QMessageBox.Yes | QMessageBox.No
                 )
@@ -544,7 +659,15 @@ class MainWindow(QMainWindow):
 
         self.dl_toggle.setChecked(False)
         self.ul_toggle.setChecked(False)
-        self.limiter.remove_all_limits()
+        if not self.limiter.remove_all_limits():
+            QMessageBox.critical(
+                self,
+                "Could not fully remove limits",
+                "The proxy settings were restored where possible, but Windows QoS did not confirm removal. "
+                "Run the app as Administrator and try again."
+            )
+            self._update_status_display()
+            return
 
         self.config["engaged"] = False
         save_config(self.config)
@@ -568,16 +691,24 @@ class MainWindow(QMainWindow):
         if dl_kb or ul_kb:
             txt_dl = f"{(dl_kb*8)/1024:.1f} Mbps" if dl_kb else "MAX"
             txt_ul = f"{(ul_kb*8)/1024:.1f} Mbps" if ul_kb else "MAX"
-            self.status_bar.showMessage(f"SYS // ENGAGED: DL {txt_dl} | UL {txt_ul}   [ENGINE: KERNEL + SHAPER]")
+            self.status_bar.showMessage(f"SYS // ENGAGED: DL {txt_dl} | UL {txt_ul}   [ENGINE: PROXY + QoS]")
         else:
             self.status_bar.showMessage("SYS // UNRESTRICTED (MAX THROUGHPUT)   [ENGINE: READY]")
 
     def _on_restart_admin(self):
         self.monitor.stop()
-        restart_as_admin()
+        if not restart_as_admin() and not self.monitor.isRunning():
+            self.monitor.start()
 
     def closeEvent(self, event):
-        """Clean termination on window close."""
+        """Hide to the notification area when requested, otherwise exit cleanly."""
+        if (not self._force_exit and self.close_to_tray_check.isChecked()
+                and self.tray_icon and self.tray_icon.isVisible()):
+            self.hide()
+            event.ignore()
+            return
+
         self.monitor.stop()
         self.limiter.stop()
         event.accept()
+        QApplication.quit()

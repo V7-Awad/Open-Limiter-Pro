@@ -3,7 +3,7 @@ import os
 import json
 import logging
 import winreg
-from typing import Tuple, Optional
+from typing import Optional
 
 try:
     from core.shaper import TrafficShaperServer, set_system_proxy, disable_system_proxy
@@ -18,12 +18,8 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 
 class GlobalBandwidthLimiter:
     """
-    Dual-Engine Bandwidth Controller:
-    1. Local Token-Bucket Traffic Shaper + Windows System Proxy:
-       Guarantees 100% hard throttling for Download and Upload on all browser,
-       streaming, web, and application traffic.
-    2. Windows QoS (Quality of Service) Policies + NLA Bypass:
-       Enforces kernel-level egress throttling across all network interfaces.
+    Uses a local system proxy for proxy-aware download traffic and Windows QoS
+    for outbound traffic. This is not a transparent, per-application WFP driver.
     """
     def __init__(self):
         self.dl_limit_kb: Optional[int] = None
@@ -31,9 +27,8 @@ class GlobalBandwidthLimiter:
         
         # Initialize and start traffic shaper daemon
         self.shaper = TrafficShaperServer(port=8899)
-        self.shaper.start()
+        self.shaper_ready = self.shaper.start()
 
-        self.load_config()
         self._ensure_nla_bypass()
 
     def load_config(self):
@@ -60,10 +55,13 @@ class GlobalBandwidthLimiter:
 
     def apply_global_limits(self, dl_kb: Optional[int], ul_kb: Optional[int]) -> bool:
         """
-        Applies system-wide download and upload limits to the whole PC.
-        Enforces both user-mode token-bucket shaping and Windows QoS.
+        Applies a shared download limit to system-proxy-aware applications and
+        a shared upload limit through Windows QoS.
         """
-        has_limit = (dl_kb and dl_kb > 0) or (ul_kb and ul_kb > 0)
+        has_download_limit = bool(dl_kb and dl_kb > 0)
+        if has_download_limit and not self.shaper_ready:
+            logger.error("Download limiting requested, but the proxy failed to start on port 8899")
+            return False
 
         # 1. Update Shaper & System Proxy
         dl_bytes = (dl_kb * 1024) if (dl_kb and dl_kb > 0) else 0
@@ -71,14 +69,21 @@ class GlobalBandwidthLimiter:
 
         self.shaper.set_limits(dl_bytes, ul_bytes)
 
-        if has_limit:
-            set_system_proxy(True, host="127.0.0.1", port=8899)
-        else:
-            set_system_proxy(False)
+        proxy_ok = set_system_proxy(has_download_limit, host="127.0.0.1", port=8899)
 
         # 2. Update Windows QoS Kernel Policies
-        self._set_policy(POLICY_DL, dl_kb)
-        self._set_policy(POLICY_UL, ul_kb)
+        # NetQosPolicy throttles outbound traffic. Windows client QoS does not
+        # provide a reliable inbound/download limiter; downloads are shaped by
+        # the proxy above for applications that honor the system proxy.
+        self._remove_policy(POLICY_DL)
+        upload_ok = self._set_policy(POLICY_UL, ul_kb)
+
+        if not proxy_ok or not upload_ok:
+            set_system_proxy(False)
+            self.shaper.set_limits(0, 0)
+            self._remove_policy(POLICY_UL)
+            logger.error("Could not apply all requested bandwidth limits")
+            return False
 
         self.dl_limit_kb = dl_kb if (dl_kb and dl_kb > 0) else None
         self.ul_limit_kb = ul_kb if (ul_kb and ul_kb > 0) else None
@@ -88,21 +93,21 @@ class GlobalBandwidthLimiter:
         return True
 
     def remove_all_limits(self) -> bool:
-        """Removes all speed limits and restores 100% full unthrottled throughput."""
+        """Removes this app's limits and restores the prior system proxy settings."""
         # Disable proxy and reset shaper
-        set_system_proxy(False)
+        proxy_ok = set_system_proxy(False)
         self.shaper.set_limits(0, 0)
 
         # Clear Windows QoS policies
+        upload_ok = self._remove_policy(POLICY_UL)
         self._remove_policy(POLICY_DL)
-        self._remove_policy(POLICY_UL)
 
         self.dl_limit_kb = None
         self.ul_limit_kb = None
         self.save_config()
 
         logger.info("All bandwidth limits removed.")
-        return True
+        return proxy_ok and upload_ok
 
     def stop(self):
         """Cleanly stops limiter and shaper server."""
@@ -124,36 +129,52 @@ class GlobalBandwidthLimiter:
             logger.debug(f"NLA bypass update: {e}")
 
     def _set_policy(self, policy_name: str, limit_kb: Optional[int]) -> bool:
-        self._remove_policy(policy_name)
+        if not self._remove_policy(policy_name):
+            return False
         if not limit_kb or limit_kb <= 0:
             return True
 
         bps = int(limit_kb * 8192)
-        ps_cmd = f"& {{ New-NetQosPolicy -Name '{policy_name}' -NetworkProfile All -ThrottleRateActionBitsPerSecond {bps} -Confirm:`$false -ErrorAction SilentlyContinue }}"
+        ps_cmd = (
+            f"try {{ New-NetQosPolicy -Name '{policy_name}' -NetworkProfile All "
+            f"-ThrottleRateActionBitsPerSecond {bps} -Confirm:$false -ErrorAction Stop; exit 0 }} "
+            "catch { Write-Error $_; exit 1 }"
+        )
         try:
             flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             res = subprocess.run(
-                ['powershell', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
                 capture_output=True,
                 text=True,
                 errors='ignore',
                 creationflags=flags
             )
-            return res.returncode == 0
+            if res.returncode != 0:
+                logger.error("QoS policy %s failed: %s", policy_name, res.stderr.strip())
+                return False
+            return True
         except Exception as e:
             logger.error(f"Failed setting policy {policy_name}: {e}")
             return False
 
-    def _remove_policy(self, policy_name: str):
-        ps_cmd = f"& {{ Remove-NetQosPolicy -Name '{policy_name}' -Confirm:`$false -ErrorAction SilentlyContinue }}"
+    def _remove_policy(self, policy_name: str) -> bool:
+        ps_cmd = (
+            f"try {{ Get-NetQosPolicy -Name '{policy_name}' -ErrorAction SilentlyContinue "
+            "| Remove-NetQosPolicy -Confirm:$false -ErrorAction Stop; exit 0 } "
+            "catch { Write-Error $_; exit 1 }"
+        )
         try:
             flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            subprocess.run(
-                ['powershell', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+            res = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
                 capture_output=True,
                 text=True,
                 errors='ignore',
                 creationflags=flags
             )
-        except Exception:
-            pass
+            if res.returncode != 0:
+                logger.error("Removing QoS policy %s failed: %s", policy_name, res.stderr.strip())
+            return res.returncode == 0
+        except Exception as e:
+            logger.error("Failed removing QoS policy %s: %s", policy_name, e)
+            return False

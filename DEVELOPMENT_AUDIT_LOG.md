@@ -363,8 +363,15 @@ When reviewing this codebase, the following technical vectors are recommended fo
 
 ## 8. Conclusion
 
-OpenLimiter Pro is currently operating in a **stable, robust, and clean state**:
-1. It is distributed as a single standalone portable executable: `dist/OpenLimiterPro.exe`.
-2. It features an ultra-modern 2026 Linear/Raycast dark visual identity.
-3. It enforces accurate bandwidth throttling matching Fast.com and Speedtest targets in `Mbps`.
-4. It exits cleanly without leaving zombie background processes, locked sockets, or lingering registry modifications.
+The implementation has a polished interface, but the earlier claims of complete system-wide shaping and a verified standalone binary were too strong. The download shaper only handles applications that use the Windows system proxy; NetQoS is used for outbound traffic. Per-application controls and transparent shaping require a Windows filtering driver. Confirm the packaged executable exists in `dist/` before distributing it.
+
+### Review correction (2026-11-24)
+- Fixed PowerShell QoS commands to pass `-Confirm:$false` as a PowerShell boolean and report command failures instead of silently treating them as success.
+- Removed stale saved limit values from the active state at startup; old `global_config.json` values no longer make the UI claim limits are active when they were not applied.
+- Added a readiness check for the local proxy before enabling download shaping.
+- Preserved and restored the user's previous proxy registry values. Cleanup no longer disables an unrelated proxy.
+- Removed the ineffective download NetQoS policy; Windows client QoS is used for upload only.
+- Updated the UI help text and README to describe shared proxy/QoS limits and their per-application limitations accurately.
+- Added source launcher checks with actionable Python/dependency setup instructions.
+- Reintroduced optional notification-area mode and Windows sign-in startup at the user's request. Both settings are disabled by default and can be changed in the Settings dialog.
+- Added a desktop shortcut action and removed the executable's always-administrator manifest so background startup does not trigger UAC. QoS operations still request elevation when needed.

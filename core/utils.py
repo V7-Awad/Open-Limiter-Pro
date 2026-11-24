@@ -2,6 +2,7 @@ import ctypes
 import json
 import os
 import sys
+import subprocess
 import winreg
 from typing import Tuple
 
@@ -19,7 +20,10 @@ def restart_as_admin():
     
     python_exe = sys.executable
     script_path = os.path.abspath(sys.argv[0])
-    params = " ".join([f'"{arg}"' for arg in sys.argv[1:]])
+    if getattr(sys, "frozen", False):
+        params = subprocess.list2cmdline(sys.argv[1:])
+    else:
+        params = subprocess.list2cmdline([script_path, *sys.argv[1:]])
     
     # Execute ShellExecuteW with 'runas' verb to trigger UAC prompt
     try:
@@ -27,7 +31,7 @@ def restart_as_admin():
             None,
             "runas",
             python_exe,
-            f'"{script_path}" {params}',
+            params,
             None,
             1 # SW_SHOWNORMAL
         )
@@ -62,7 +66,8 @@ def load_config() -> dict:
         "ul_unit": 0,  # 0: Mbps (Speedtest/Fast.com)
         "ul_enabled": True,
         "engaged": False,
-        "autostart": True,
+        "autostart": False,
+        "close_to_tray": False,
     }
     path = get_config_path()
     if os.path.exists(path):
@@ -91,7 +96,7 @@ def set_autostart(enable: bool) -> bool:
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     app_name = "OpenLimiterPro"
     try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
         if enable:
             if getattr(sys, "frozen", False):
                 cmd = f'"{sys.executable}" --minimized'
@@ -108,6 +113,50 @@ def set_autostart(enable: bool) -> bool:
         return True
     except Exception as e:
         print(f"Failed to configure autostart: {e}")
+        return False
+
+def create_desktop_shortcut() -> bool:
+    """Creates a Windows .lnk shortcut for the current source or frozen app."""
+    from PySide6.QtCore import QStandardPaths
+
+    desktop = QStandardPaths.writableLocation(QStandardPaths.DesktopLocation)
+    if not desktop:
+        return False
+
+    if getattr(sys, "frozen", False):
+        target = sys.executable
+        arguments = ""
+        working_dir = os.path.dirname(target)
+    else:
+        target = sys.executable
+        script = os.path.abspath(sys.argv[0])
+        arguments = f'"{script}"'
+        working_dir = os.path.dirname(script)
+
+    shortcut = os.path.join(desktop, "OpenLimiter Pro.lnk")
+    ps = (
+        "$w=New-Object -ComObject WScript.Shell; "
+        f"$s=$w.CreateShortcut('{shortcut.replace(chr(39), chr(39)*2)}'); "
+        f"$s.TargetPath='{target.replace(chr(39), chr(39)*2)}'; "
+        f"$s.Arguments='{arguments.replace(chr(39), chr(39)*2)}'; "
+        f"$s.WorkingDirectory='{working_dir.replace(chr(39), chr(39)*2)}'; "
+        f"$s.IconLocation='{(os.path.join(os.path.dirname(target), 'assets', 'icon.ico') if not getattr(sys, 'frozen', False) else target).replace(chr(39), chr(39)*2)}'; "
+        "$s.Save()"
+    )
+    try:
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True,
+            text=True,
+            creationflags=flags,
+            timeout=10,
+        )
+        if result.returncode:
+            print(f"Failed to create desktop shortcut: {result.stderr.strip()}")
+        return result.returncode == 0
+    except Exception as e:
+        print(f"Failed to create desktop shortcut: {e}")
         return False
 
 def is_autostart_enabled() -> bool:

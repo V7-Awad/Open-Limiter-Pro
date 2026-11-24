@@ -5,16 +5,16 @@
 ![UI](https://img.shields.io/badge/Design-Linear%20%2F%20Raycast%202026-black.svg)
 ![License](https://img.shields.io/badge/License-MIT-emerald.svg)
 
-**OpenLimiter Pro** is a high-performance system-wide network bandwidth controller and monitoring application for Windows. Engineered with a futuristic, precision-driven dark aesthetic inspired by Linear, Raycast, and Vercel, it enables system-wide throttling for both download and upload speeds without requiring external hardware or kernel drivers.
+**OpenLimiter Pro** is a Windows bandwidth controller with shared download and upload limits. Downloads are shaped through the Windows system proxy, so apps that ignore that proxy may bypass the download limit. Uploads use Windows QoS. It does not currently provide NetLimiter-style per-application rules; that requires a Windows network filter driver.
 
 ---
 
 ## ⚡ Key Highlights
 
-- **Single Standalone Executable**: Completely portable (`OpenLimiterPro.exe`). Zero installation required, zero setup conflicts, and zero file locks.
-- **Dual-Engine Precision Architecture**:
-  - **Ingress (Download)**: High-throughput local token-bucket streaming proxy (`127.0.0.1:8899`) with WinINet system routing.
-  - **Egress (Upload)**: Windows NetQoS kernel policy enforcement with automated NLA bypass.
+- **Portable Build Available**: The project can be packaged as a single executable after installing PyInstaller.
+- **Shared Bandwidth Limits**:
+  - **Download**: Local token-bucket proxy (`127.0.0.1:8899`) for applications that honor Windows system proxy settings.
+  - **Upload**: Windows NetQoS policy. This controls outbound traffic; it is not a per-app limiter.
 - **1:1 Unit Matching (Mbps / MB/s / KB/s)**:
   - Default unit is **Mbps** (Speedtest / Fast.com standard). Entering `1.0 Mbps` enforces an exact `1.0 Mbps` limit on Fast.com.
   - Also supports `MB/s` (Browser / Steam / IDM transfer rates) and `KB/s` for fine-grained tuning.
@@ -24,7 +24,7 @@
   - Dual telemetry readout: simultaneously displays Byte rate (e.g., `512 KB/s`) and Bit rate (e.g., `4.1 Mbps`).
 - **Silent & Clean Lifecycle**:
   - Headless QoS and registry execution with no visible console or PowerShell popup windows.
-  - Clean process exit: closing the window immediately restores full unthrottled network speed and terminates all threads cleanly.
+  - Closing the window exits and restores system settings, unless notification-area mode is enabled. Use the tray menu's **Exit** command to stop a background instance and restore settings.
 
 ---
 
@@ -61,13 +61,15 @@
 
 ## 🚀 Quick Start (Portable Binary)
 
-1. Download the standalone executable from `dist/OpenLimiterPro.exe` or the GitHub Releases page.
-2. Double-click **`OpenLimiterPro.exe`**.
-3. Accept the Windows UAC (User Account Control) prompt to grant administrative privileges (required for Windows network QoS and system proxy configuration).
-4. Set your desired **Download** and **Upload** limits:
+1. Install Python and the dependencies using the source instructions below, or build the standalone executable.
+2. Run `run.bat` (source) or double-click **`dist/OpenLimiterPro.exe`** (after building).
+3. The app opens normally. Accept a Windows UAC prompt only when you apply or remove Windows QoS limits.
+4. Set your desired shared **Download** and **Upload** limits:
    - Use the preset buttons (e.g., `1 Mbps`, `2 Mbps`, `4 Mbps`, `8 Mbps`, `16 Mbps`) or enter a custom value.
 5. Click **⚡ ENGAGE BANDWIDTH LIMIT**.
-6. To restore maximum bandwidth at any time, click **✕ UNRESTRICT SPEED** or simply close the application.
+6. To remove the limits, click **✕ UNRESTRICT SPEED**. Closing the window exits unless notification-area mode is enabled.
+
+Open **⚙ Settings** in the status bar to create a desktop shortcut, choose whether OpenLimiter starts when you sign in to Windows, and choose whether closing the window keeps it running in the notification area. Right-click the notification-area icon and choose **Exit** to stop it completely. The open window appears on the taskbar; Windows lets you pin the desktop shortcut to the taskbar manually.
 
 ---
 
@@ -81,12 +83,12 @@ OpenLimiter Pro solves this through a synchronized two-layer architecture:
 - **Layer 1: User-Mode Token-Bucket Traffic Shaper**:
   - Runs a local high-performance streaming socket proxy on `127.0.0.1:8899`.
   - Implements an asynchronous token-bucket rate limiter that paces chunk reads to enforce exact download limits.
-  - Automatically updates the Windows Internet Settings registry (`ProxyEnable = 1`) and notifies WinINet to redirect HTTP/HTTPS/WebSocket traffic seamlessly.
+  - Temporarily updates Windows Internet Settings and restores the previous proxy values when limits are removed or the app closes. Proxy-aware HTTP/HTTPS traffic is shaped; apps that bypass the system proxy are not.
 - **Layer 2: Kernel NetQoS Policy Enforcement**:
-  - Dynamically creates Windows PowerShell NetQoS policies for system-wide outbound bandwidth throttling.
+  - Dynamically creates a Windows PowerShell NetQoS policy for shared outbound bandwidth throttling. Download QoS is not used because Windows client QoS does not reliably limit inbound traffic.
   - Automatically configures `HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\QoS\Do not use NLA = 1` via native Windows Registry APIs so policies apply consistently across all network adapters.
 - **Fail-Safe Cleanup**:
-  - Proxy and QoS configurations are automatically deactivated when the app is closed or when `UNRESTRICT SPEED` is triggered.
+  - Proxy and QoS configurations are automatically deactivated on full app exit or when `UNRESTRICT SPEED` is triggered. Closing to the notification area keeps the app and active limits running.
   - Python's `atexit` handler guarantees that internet settings revert to direct connection even in the event of an unexpected termination.
 
 ---
@@ -131,7 +133,8 @@ OpenLimiter Pro displays both metrics simultaneously in the live telemetry heade
 
 4. **Compile Single Standalone Executable**:
    ```bash
-   python -m PyInstaller --noconfirm --clean --onefile --windowed --uac-admin --icon="assets/icon.ico" --add-data="assets/icon.ico;assets" --add-data="assets/icon.png;assets" --name="OpenLimiterPro" --distpath="dist" main.py
+   python -m pip install pyinstaller
+   python -m PyInstaller --noconfirm --clean --onefile --windowed --icon="assets/icon.ico" --add-data="assets/icon.ico;assets" --add-data="assets/icon.png;assets" --name="OpenLimiterPro" --distpath="dist" main.py
    ```
    The compiled standalone binary will be generated at `dist/OpenLimiterPro.exe`.
 

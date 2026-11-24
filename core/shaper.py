@@ -10,34 +10,65 @@ logger = logging.getLogger("OpenLimiter.Shaper")
 
 INTERNET_OPTION_SETTINGS_CHANGED = 39
 INTERNET_OPTION_REFRESH = 37
+_PROXY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+_proxy_backup = None
 
-def set_system_proxy(enable: bool, host: str = "127.0.0.1", port: int = 8899):
+def set_system_proxy(enable: bool, host: str = "127.0.0.1", port: int = 8899) -> bool:
     """
     Configures Windows system-wide Internet Settings proxy.
     Notifies wininet to reload configuration immediately.
     """
+    global _proxy_backup
     try:
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+            _PROXY_KEY,
             0,
-            winreg.KEY_SET_VALUE
+            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE
         )
         if enable:
+            if _proxy_backup is None:
+                _proxy_backup = {}
+                for name in ("ProxyEnable", "ProxyServer", "ProxyOverride"):
+                    try:
+                        _proxy_backup[name] = winreg.QueryValueEx(key, name)
+                    except FileNotFoundError:
+                        _proxy_backup[name] = None
             winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
             winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, f"{host}:{port}")
             winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ, "localhost;127.*;10.*;192.168.*;<local>")
             logger.info(f"System proxy enabled: {host}:{port}")
         else:
-            winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
-            logger.info("System proxy disabled.")
+            if _proxy_backup is None:
+                try:
+                    current_server, _ = winreg.QueryValueEx(key, "ProxyServer")
+                    current_enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
+                except FileNotFoundError:
+                    current_server, current_enabled = None, 0
+                # Do not disable a proxy configured by another application.
+                if current_enabled and current_server == f"{host}:{port}":
+                    winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+            else:
+                for name, saved in _proxy_backup.items():
+                    if saved is None:
+                        try:
+                            winreg.DeleteValue(key, name)
+                        except FileNotFoundError:
+                            pass
+                    else:
+                        value, value_type = saved
+                        winreg.SetValueEx(key, name, 0, value_type, value)
+                _proxy_backup = None
+            logger.info("System proxy settings restored.")
         winreg.CloseKey(key)
 
         # Notify WinINet
         ctypes.windll.wininet.InternetSetOptionW(0, INTERNET_OPTION_SETTINGS_CHANGED, 0, 0)
         ctypes.windll.wininet.InternetSetOptionW(0, INTERNET_OPTION_REFRESH, 0, 0)
+        return True
     except Exception as e:
         logger.error(f"Failed to set system proxy: {e}")
+        return False
 
 def disable_system_proxy():
     set_system_proxy(False)
@@ -91,6 +122,8 @@ class TrafficShaperServer:
         self.loop = None
         self.thread = None
         self.is_running = False
+        self._ready = threading.Event()
+        self._startup_error = None
 
     def set_limits(self, dl_bytes_sec: int, ul_bytes_sec: int):
         self.dl_bucket.update_rate(dl_bytes_sec)
@@ -98,16 +131,25 @@ class TrafficShaperServer:
 
     def start(self):
         if self.is_running:
-            return
+            return self._ready.wait(0)
         self.is_running = True
+        self._ready.clear()
+        self._startup_error = None
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
+        if not self._ready.wait(3.0):
+            self.is_running = False
+            logger.error("Timed out waiting for traffic shaper to bind port %s", self.port)
+            return False
+        return self._startup_error is None
 
     def stop(self):
         self.is_running = False
         disable_system_proxy()
         if self.loop and self.server:
             self.loop.call_soon_threadsafe(self.server.close)
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2.0)
 
     def _run_loop(self):
         self.loop = asyncio.new_event_loop()
@@ -115,11 +157,17 @@ class TrafficShaperServer:
         try:
             self.loop.run_until_complete(self._serve())
         except Exception as e:
+            self._startup_error = e
+            self._ready.set()
             logger.error(f"Shaper loop exception: {e}")
+        finally:
+            if not self.loop.is_closed():
+                self.loop.close()
 
     async def _serve(self):
         self.server = await asyncio.start_server(self._handle_client, '127.0.0.1', self.port)
         logger.info(f"Traffic shaper active on 127.0.0.1:{self.port}")
+        self._ready.set()
         async with self.server:
             await self.server.serve_forever()
 
