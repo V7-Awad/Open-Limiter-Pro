@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+# Build & Dist
+build/
+dist/
+*.egg-info/
+
+# Configuration
+rules.json
+
+# IDE
+.vscode/
+.idea/
